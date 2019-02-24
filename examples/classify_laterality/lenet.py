@@ -2,13 +2,17 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import numpy as np
+
 
 class LeNet(nn.Module):
 
-    def __init__(self):
+    def __init__(self, initial_shape, output_units=2):
         super(LeNet, self).__init__()
+        self.initial_shape = np.array(initial_shape)
+        self.output_cnn_size = self.final_shape(self.initial_shape).prod()
 
-        self.output_cnn_size = 5
+        self.output_units = output_units
 
         # 1 input image channel, 6 output channels, 5x5 square convolution
         # kernel
@@ -23,7 +27,7 @@ class LeNet(nn.Module):
             kernel_size=5,
         )
         self.fc1 = nn.Linear(
-            in_features=self.output_cnn_size**2 * self.conv2.out_channels,
+            in_features=self.output_cnn_size * self.conv2.out_channels,
             out_features=120,
         )
         self.fc2 = nn.Linear(
@@ -32,7 +36,7 @@ class LeNet(nn.Module):
         )
         self.fc3 = nn.Linear(
             in_features=84,
-            out_features=10,
+            out_features=self.output_units,
         )
 
     def forward(self, x):
@@ -59,14 +63,26 @@ class LeNet(nn.Module):
             num_features *= s
         return num_features
 
+    @staticmethod
+    def final_shape(initial_shape):
+        shape = initial_shape.copy()
+        for i in range(2):
+            shape -= 4  # conv
+            shape //= 2  # pool
+        return shape
+
+    @property
+    def num_parameters(self):
+        return sum(parameters.shape for parameters in self.parameters())
+
 
 if __name__ == '__main__':
-    net = LeNet()
-    print(net)
     nSamples = 1
     nChannels = 1
     height = 32
     width = 32
+    net = LeNet(initial_shape=(height, width))
+    print(net)
     net_input = torch.randn(
         nSamples,
         nChannels,
