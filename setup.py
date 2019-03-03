@@ -9,7 +9,7 @@ setup(
     author_email='fernando.perezgarcia.17@ucl.ac.uk',
     packages=find_packages(exclude=['*tests']),
     install_requires=[
-        'namedtensor',
+        # 'namedtensor',
         'tensorflow',
         'tensorboardX',
         'matplotlib',

@@ -9,7 +9,7 @@ from tensorboardX import SummaryWriter
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from torchvision.utils import make_grid
 from torchvision.transforms import Pad, Resize, Compose
 
@@ -18,8 +18,8 @@ from dataset import ResectionSideDataset
 
 # TODO:
 # Add validation
-# Try segmentation
 # Try detection
+# Try segmentation
 # Same on 3D
 
 
@@ -40,7 +40,7 @@ def plot_batch(batch, classes=None):
 
 
 def predict(inputs, network, classes):
-    # inputs shape is [batch_size, channels, height, width]
+    # inputs shape should be [batch_size, channels, height, width]
     if len(inputs.shape) == 3:  # [channels, height, width]
         inputs = torch.unsqueeze(inputs, 0)
     outputs = network(inputs)
@@ -49,14 +49,18 @@ def predict(inputs, network, classes):
 
 
 if __name__ == '__main__':
+    # pylint: disable=invalid-name
     verbose = False
 
     # TensorBoard
     writer = SummaryWriter()
 
     # Sampling log
-    log_path = Path(writer.log_dir / 'log.txt')
+    log_path = Path(writer.log_dir) / 'log.txt'
     sampled_images = []
+
+    # Define input image size
+    net_input_size = 64
 
     # Figure out necessary transforms to get a 32x32 image
     native_shape = np.array((193, 229))
@@ -66,41 +70,60 @@ if __name__ == '__main__':
     padding = (left, top, right, bottom)
     transform = Compose([
         Pad(padding, padding_mode='edge'),
-        Resize((32, 32), Image.LANCZOS),
+        Resize((net_input_size, net_input_size), Image.LANCZOS),
     ])
 
-    # Create dataset
-    root_dir = Path('~/git/pytorch-tests/pytorch_dataset/').expanduser()
+    # Create datasets
+    root_dir = Path('/tmp/pytorch_dataset/').expanduser()
     dataset = ResectionSideDataset(str(root_dir), transform=transform)
+    N = len(dataset)
+    dataset_split_ratio = 0.8
+    all_indices = np.arange(N)
+    np.random.shuffle(all_indices)
+    first_validation_index = int(N * dataset_split_ratio)
+    training_indices = all_indices[first_validation_index:]
+    validation_indices = all_indices[:first_validation_index]
+    training_set = Subset(dataset, training_indices)
+    validation_set = Subset(dataset, validation_indices)
 
+    # Create loaders
+    num_workers = 4  # 0 if CUDA?
     batch_size = 4
-    loader = DataLoader(
-        dataset,
+    training_loader = DataLoader(
+        training_set,
         batch_size=batch_size,
+        num_workers=num_workers,
         shuffle=True,
-        # num_workers=4,
+    )
+
+    # I can use larger batch for validation as no gradient needs to be computed
+    validation_loader = DataLoader(
+        validation_set,
+        batch_size=2 * batch_size,
+        num_workers=num_workers,
+        shuffle=False,  # no need to shuffle the validation set
     )
 
     # LeNet
-    batch = get_batch(loader)
+    batch = get_batch(training_loader)
     _, _, height, width = batch['image'].shape
     shape = height, width
-    shape = 32, 32
+    shape = net_input_size, net_input_size
 
     # https://discuss.pytorch.org/t/how-can-l-load-my-best-model-as-a-feature-extractor-evaluator/17254/6
     activation = {}
-
     def get_activation(name):
         def hook(model, input, output):
             activation[name] = output.detach()
         return hook
 
+    # Actual network
     net = LeNet(shape)
     net.fc2.register_forward_hook(get_activation('fc2'))
     net.conv2.register_forward_hook(get_activation('conv2'))
 
     # Log architecture
-    dummy_input = torch.zeros(1, 1, 32, 32)
+    dummy_input = torch.zeros(1, 1, net_input_size, net_input_size)
     writer.add_graph(
         net,
         input_to_model=dummy_input,
@@ -127,11 +150,28 @@ if __name__ == '__main__':
         features = np.empty(features_shape)
         epoch_labels = []
 
+        # Log epoch validation loss
+        net.eval()
+        validation_loss = 0
+        for batch_index, batch in enumerate(validation_loader):
+            inputs = batch['image']
+            labels = batch['target']
+            outputs = net(inputs)
+            batch_loss = criterion(outputs, labels)
+            validation_loss += batch_loss.item()
+        num_validation_batches = len(validation_loader)
+        validation_loss /= num_validation_batches
+        writer.add_scalars(
+            'Loss',
+            {'Epoch/validation': validation_loss},
+            iteration,
+        )
+
+
         # Log stuff every N epochs
         if epoch % log_every_n_epochs == 0 and verbose:
-            net.eval()
             # Log embedding of last layer before classifier
-            for batch_index, batch in enumerate(loader):
+            for batch_index, batch in enumerate(validation_loader):
                 inputs = batch['image']
                 labels = batch['target']
                 epoch_labels += labels.tolist()
@@ -146,7 +186,7 @@ if __name__ == '__main__':
             writer.add_embedding(
                 features,
                 global_step=iteration,
-                tag='Embedding',
+                tag='Validation/Embedding',
                 metadata=epoch_labels,
             )
 
@@ -162,7 +202,7 @@ if __name__ == '__main__':
         net.train()
         running_loss = 0
         epoch_loss = 0
-        for batch_index, batch in enumerate(loader):
+        for batch_index, batch in enumerate(training_loader):
             iteration += 1
             inputs = batch['image']
             labels = batch['target']
@@ -193,19 +233,21 @@ if __name__ == '__main__':
 
             # Log iteration loss
             writer.add_scalars(
-                'training/loss',
-                {'batch': batch_loss.item()},
+                'Loss',
+                {'Batch/Training': batch_loss.item()},
                 iteration,
             )
             epoch_loss += batch_loss.item()
 
-            # Log activations of conv2
-            batch_activations = activation['conv2']
+            # Log input images
             inputs_numpy = inputs.expand(-1, 3, -1, -1).numpy()
             inputs_numpy -= inputs_numpy.min()
             inputs_numpy /= inputs_numpy.max()
-            writer.add_images('Input', inputs_numpy, iteration)
+            writer.add_images('Training/Input', inputs_numpy, iteration)
+
+            # Log activations of conv2
             if verbose:
+                batch_activations = activation['conv2']
                 for filter_idx in range(batch_activations.shape[1]):
                     layer_activations = batch_activations[:, filter_idx:filter_idx+1, :, :]
                     layer_activations = layer_activations.expand(-1, 3, -1, -1)
@@ -218,12 +260,12 @@ if __name__ == '__main__':
                         iteration,
                     )
 
-        # Log epoch loss
-        num_batches = len(loader)
-        epoch_loss /= num_batches
+        # Log epoch training loss
+        num_training_batches = len(training_loader)
+        epoch_loss /= num_training_batches
         writer.add_scalars(
-            'training/loss',
-            {'epoch': epoch_loss},
+            'Loss',
+            {'Epoch/Training': epoch_loss},
             iteration,
         )
 

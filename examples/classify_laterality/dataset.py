@@ -9,7 +9,7 @@ from torch.utils.data import Dataset
 class ResectionSideDataset(Dataset):
     def __init__(self, root_dir, transform=None):
         self.root_dir = Path(root_dir)
-        self.filepaths = list(self.root_dir.glob('*/*tif'))
+        self.filepaths = sorted(list(self.root_dir.glob('*/*tif')))
         self.transform = transform
         self.classes = (
             'left',
