@@ -31,11 +31,11 @@ class LeNet(nn.Module):
             out_features=120,
         )
         self.fc2 = nn.Linear(
-            in_features=120,
+            in_features=self.fc1.out_features,
             out_features=84,
         )
         self.fc3 = nn.Linear(
-            in_features=84,
+            in_features=self.fc2.out_features,
             out_features=self.output_units,
         )
 
