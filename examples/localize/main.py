@@ -56,6 +56,7 @@ def plot_batch(batch, outputs=None):
     add_boxes_to_axis(axis, images, boxes)
     if outputs is not None:
         add_boxes_to_axis(axis, images, outputs, color=(1, 0, 1))
+    axis.set_title(' '.join(batch.name))
     plt.tight_layout()
     return fig
 
@@ -120,6 +121,7 @@ if __name__ == '__main__':
 
     # https://discuss.pytorch.org/t/how-can-l-load-my-best-model-as-a-feature-extractor-evaluator/17254/6
     activation = {}
+
     def get_activation(name):
         def hook(model, input, output):
             activation[name] = output.detach()
@@ -254,7 +256,8 @@ if __name__ == '__main__':
         # Update log
         lines = []
         for iteration, images_names in enumerate(sampled_images):
-            lines.append(f'Iteration {iteration: 5d}: {", ".join(images_names)}')
+            lines.append(
+                f'Iteration {iteration: 5d}: {", ".join(images_names)}')
 
         log_path.write_text('\n'.join(lines))
 
