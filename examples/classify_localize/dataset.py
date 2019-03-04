@@ -75,9 +75,11 @@ class ResectionSideDataset(Dataset):
         (center_y, center_x, height, width)
         """
         coords = np.array(np.where(array)).T  # N x 2
-        coords = coords / np.array(array.shape)  # normalize
-        cmin = coords.min(axis=0)
-        cmax = coords.max(axis=0)
+        shape = np.array(array.shape)
+        cmin = coords.min(axis=0) - 0.5
+        cmax = coords.max(axis=0) + 0.5
+        cmin = cmin / shape  # normalize
+        cmax = cmax / shape  # normalize
         center_y, center_x = (cmin + cmax) / 2
         height, width = cmax - cmin
         return center_y, center_x, height, width
