@@ -81,8 +81,8 @@ if __name__ == '__main__':
     all_indices = np.arange(N)
     np.random.shuffle(all_indices)
     first_validation_index = int(N * dataset_split_ratio)
-    training_indices = all_indices[first_validation_index:]
-    validation_indices = all_indices[:first_validation_index]
+    training_indices = all_indices[:first_validation_index]
+    validation_indices = all_indices[first_validation_index:]
     training_set = Subset(dataset, training_indices)
     validation_set = Subset(dataset, validation_indices)
 
