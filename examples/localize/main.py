@@ -16,9 +16,6 @@ from lenet_localization import LeNetLocalization
 from dataset import ResectionSideDataset
 
 # TODO:
-# Add validation
-# Try detection
-# Try segmentation
 # Same on 3D
 
 
@@ -44,13 +41,15 @@ def plot_batch(batch, outputs=None):
     images = batch.image
     labels = batch.label
     boxes = batch.bounding_box
-    images_grid = make_grid(images, padding=0).numpy().transpose(1, 2, 0)
-    images_grid -= images_grid.min()
-    images_grid /= images_grid.max()
-    images_grid *= 255
-    images_grid = images_grid.astype(np.uint8)
+    images_grid = make_grid(
+        images,
+        normalize=True,
+        scale_each=True,
+        padding=0,
+    )
+    images_grid = images_grid.numpy().transpose(1, 2, 0)
     labels_grid = make_grid(labels, padding=0).numpy().transpose(1, 2, 0)
-    images_grid[labels_grid > 0] = 255
+    images_grid[labels_grid > 0] = 1
     fig, axis = plt.subplots()
     axis.imshow(images_grid)
     add_boxes_to_axis(axis, images, boxes)
