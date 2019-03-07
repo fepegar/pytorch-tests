@@ -108,7 +108,7 @@ if __name__ == '__main__':
     #     depth=4,
     #     padding=True,
     # )
-    from highres2dnet import HighRes2DNet
+    from highresnet import HighRes2DNet
     net = HighRes2DNet(in_channels=1,
                        out_channels=2,
                        initial_out_channels_power=3,
