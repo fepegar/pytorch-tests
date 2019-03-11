@@ -1,3 +1,5 @@
+# pylint: disable=logging-fstring-interpolation
+
 import logging
 from pathlib import Path
 
@@ -11,9 +13,10 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, Subset
 from torchvision.utils import make_grid
 
-from unet import UNet
-from dataset import ResectionSideDataset
+from sacred import Experiment
+ex = Experiment('sacred_test')
 
+from dataset import ResectionSideDataset
 
 def get_batch(loader):
     return next(iter(loader))
@@ -46,10 +49,16 @@ def plot_batch(batch, outputs=None):
     return fig
 
 
-if __name__ == '__main__':
+@ex.config
+def cfg():
+    # pylint: disable=unused-variable
     batch_size = 4
     learning_rate = 1e-3
+    architecture = 'pnet'
 
+
+@ex.automain
+def main(batch_size, learning_rate, architecture):
     # pylint: disable=invalid-name
     verbose = False
 
@@ -58,7 +67,7 @@ if __name__ == '__main__':
     experiment_dir = Path(writer.log_dir)
 
     # Log
-    log_path = '/tmp/log.log'  # experiment_dir / 'log.log'
+    log_path = experiment_dir / 'log.log'
 
     logger = logging.getLogger(experiment_dir.name)
     logger.setLevel(logging.DEBUG)
@@ -116,7 +125,7 @@ if __name__ == '__main__':
     validation_set = Subset(dataset, validation_indices)
 
     # Create loaders
-    num_workers = 0  # 0 if CUDA?  -- Also > 0 doesn't work with pytorch-nightly
+    num_workers = 0  # 0 if CUDA?  -- Also > 0 doesn't seem to work with pytorch-nightly
     training_loader = DataLoader(
         training_set,
         batch_size=batch_size,
@@ -132,26 +141,27 @@ if __name__ == '__main__':
         shuffle=False,  # no need to shuffle the validation set
     )
 
-    # UNet
-    # net = UNet()
-    # from unet_github import UNet
-    # net = UNet(
-    #     depth=4,
-    #     padding=True,
-    # )
-    from highresnet import HighRes2DNet
-    # net = HighRes2DNet(in_channels=1,
-    #                    out_channels=2,
-    #                    initial_out_channels_power=3,
-    #                    layers_per_block=2,
-    #                    blocks_per_dilation=2,
-    #                    dilations=3,
-    #                    batch_norm=True,
-    #                    residual=True,
-    #                    padding_mode='constant',
-    # )
-    from pnet import PNet
-    net = PNet(in_channels=1, out_channels=2)
+    if architecture == 'unet':
+        from unet_github import UNet
+        net = UNet(
+            depth=4,
+            padding=True,
+        )
+    elif architecture == 'highresnet':
+        from highresnet import HighRes2DNet
+        net = HighRes2DNet(in_channels=1,
+                           out_channels=2,
+                           initial_out_channels_power=3,
+                           layers_per_block=2,
+                           blocks_per_dilation=2,
+                           dilations=3,
+                           batch_norm=True,
+                           residual=True,
+                           padding_mode='constant',
+        )
+    elif architecture == 'pnet':
+        from pnet import PNet
+        net = PNet(in_channels=1, out_channels=2)
     logger.debug(f'Architecture: {net}')
 
     # # Log architecture
@@ -290,7 +300,7 @@ if __name__ == '__main__':
         logger.info('Finished training')
     except KeyboardInterrupt:
         logger.warning('KeyboardInterrupt')
-    except Exception as e:
+    except Exception:
         logger.critical('Exception occurred', exc_info=True)
 
     model_path = experiment_dir / 'model.pt'
