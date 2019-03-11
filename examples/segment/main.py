@@ -1,15 +1,13 @@
+import logging
 from pathlib import Path
 
 import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle
 from tensorboardX import SummaryWriter
 
 import torch
-import torch.nn as nn
 import torch.optim as optim
-import torch.nn.functional as F
 from torch.utils.data import DataLoader, Subset
 from torchvision.utils import make_grid
 
@@ -19,6 +17,7 @@ from dataset import ResectionSideDataset
 
 def get_batch(loader):
     return next(iter(loader))
+
 
 def plot_batch(batch, outputs=None):
     images = batch.image
@@ -47,15 +46,74 @@ def plot_batch(batch, outputs=None):
     return fig
 
 
+class ColoredFormatter(logging.Formatter):
+    def __init__(self, msg, use_color=True):
+        super().__init__(msg)
+        self.use_color = use_color
+        RED = '\033[91m'
+        GREEN = '\033[92m'
+        YELLOW = '\033[93m'
+        BLUE = '\033[94m'
+        MAGENTA = '\033[95m'
+        CYAN = '\033[96m'
+        WHITE = '\033[97m'
+        BOLD = '\033[1m'
+        ENDC = '\033[0m'
+
+        self.colormap = {
+            'INFO': GREEN,
+            'DEBUG': CYAN,
+            'WARNING': YELLOW,
+            'ERROR': RED,
+            'CRITICAL': RED,
+        }
+
+    def format(self, record):
+        levelname = record.levelname
+        ENDC = '\033[0m'
+        if self.use_color:
+            try:
+                levelname_color = self.colormap[levelname] + levelname + ENDC
+                record.levelname = levelname_color
+            except KeyError:
+                print('levelname not in', self.colormap)
+        return logging.Formatter.format(self, record)
+
+
 if __name__ == '__main__':
+    batch_size = 4
+    learning_rate = 1e-3
+
     # pylint: disable=invalid-name
     verbose = False
 
     # TensorBoard
     writer = SummaryWriter()
+    logger.debug(f'TensorBoard directory: {writer.log_dir}')
+    experiment_dir = Path(writer.log_dir)
+
+    # Log
+    log_path = '/tmp/log.log'  # experiment_dir / 'log.log'
+    logger.debug(f'Log file: {log_path}')
+
+    logger = logging.getLogger(experiment_dir.name)
+    logger.setLevel(logging.DEBUG)
+
+    log_file = logging.FileHandler(log_path)
+    log_file.setLevel(logging.DEBUG)
+    formatter = logging.Formatter(
+        '%(asctime)s - %(levelname)-8s - %(message)s')
+    log_file.setFormatter(formatter)
+    logger.addHandler(log_file)
+
+    console = logging.StreamHandler()
+    console.setLevel(logging.INFO)
+    console_formatter = ColoredFormatter('%(levelname)-8s - %(message)s')
+    console.setFormatter(console_formatter)
+    logger.addHandler(console)
 
     # Sampling log
-    log_path = Path(writer.log_dir) / 'log.txt'
+    sampled_images_log_path = experiment_dir / 'sampled_images.log'
     sampled_images = []
 
     # Define input image size
@@ -85,7 +143,6 @@ if __name__ == '__main__':
 
     # Create loaders
     num_workers = 0  # 0 if CUDA?  -- Also > 0 doesn't work with pytorch-nightly
-    batch_size = 4
     training_loader = DataLoader(
         training_set,
         batch_size=batch_size,
@@ -109,16 +166,19 @@ if __name__ == '__main__':
     #     padding=True,
     # )
     from highresnet import HighRes2DNet
-    net = HighRes2DNet(in_channels=1,
-                       out_channels=2,
-                       initial_out_channels_power=3,
-                       layers_per_block=2,
-                       blocks_per_dilation=2,
-                       dilations=3,
-                       batch_norm=True,
-                       residual=True,
-                       padding_mode='Zero',
-    )
+    # net = HighRes2DNet(in_channels=1,
+    #                    out_channels=2,
+    #                    initial_out_channels_power=3,
+    #                    layers_per_block=2,
+    #                    blocks_per_dilation=2,
+    #                    dilations=3,
+    #                    batch_norm=True,
+    #                    residual=True,
+    #                    padding_mode='constant',
+    # )
+    from pnet import PNet
+    net = PNet(in_channels=1, out_channels=2)
+
     # # Log architecture
     # if True: #verbose:
     #     dummy_input = torch.zeros(1, 1, net_input_size, net_input_size)
@@ -135,125 +195,129 @@ if __name__ == '__main__':
     # Optimizer
     optimizer = optim.Adam(
         net.parameters(),
-        lr=1e-4,
+        lr=learning_rate,
         amsgrad=True,
     )
 
-    print('Training...')
+    logger.info('Training...')
     epochs = 100
     epochs += 1  # For logging purposes
     log_every_n_epochs = 10
     progress = tqdm(range(epochs))
     iteration = 0
-    for epoch in progress:  # loop over the dataset multiple times
-        # Log epoch validation loss
-        net.eval()
-        validation_loss = 0
-        for batch_index, batch in enumerate(validation_loader):
-            inputs = batch.image
-            labels = batch.label
-            outputs = net(inputs)
-            foreground = outputs[:, 1:2, ...]
-            batch_loss = criterion(foreground, labels.float())
-            validation_loss += batch_loss.item()
+    try:
+        for epoch in progress:  # loop over the dataset multiple times
+            # Log epoch validation loss
+            net.eval()
+            validation_loss = 0
+            for batch_index, batch in enumerate(validation_loader):
+                inputs = batch.image
+                labels = batch.label
+                outputs = net(inputs)
+                foreground = outputs[:, 1:2, ...]
+                batch_loss = criterion(foreground, labels.float())
+                validation_loss += batch_loss.item()
 
-            # Plot first batch
-            if batch_index == 0:
-                figure = plot_batch(batch, outputs=outputs)
-                writer.add_figure(
-                    'Epoch/Validation',
-                    figure,
-                    iteration,
-                )
-        num_validation_batches = len(validation_loader)
-        validation_loss /= num_validation_batches
-        writer.add_scalars(
-            'Loss',
-            {'Epoch/Validation': validation_loss},
-            iteration,
-        )
-
-        # Log stuff every N epochs
-        if epoch % log_every_n_epochs == 0 and verbose:
-            # Log weights histograms
-            for name, parameters in net.named_parameters():
-                writer.add_histogram(
-                    name,
-                    parameters.detach().numpy(),
-                    iteration,
-                )
-
-        # Update weights
-        net.train()
-        running_loss = 0
-        epoch_loss = 0
-        for batch_index, batch in enumerate(training_loader):
-            iteration += 1
-            inputs = batch.image
-            labels = batch.label
-            sampled_images.append(batch.name)
-
-            # Zero the parameter gradients
-            optimizer.zero_grad()
-
-            # Forward pass
-            outputs = net(inputs)
-
-            # Compute loss
-            foreground = outputs[:, 1:2, ...]
-            batch_loss = criterion(foreground, labels.float())
-
-            # Compute gradients (dJ/dw) through backpropagation
-            batch_loss.backward()
-
-            # Update weights
-            optimizer.step()
-
-            # Print statistics
-            running_loss += batch_loss.item()
-            if iteration % 10 == 9:  # print every 10 iterations
-                running_loss /= 10
-                message = f'[{epoch}, {batch_index:5d}] loss: {running_loss:.3f}'
-                progress.set_description(message)
-                running_loss = 0
-
-            # Log iteration loss
+                # Plot first batch
+                if batch_index == 0:
+                    figure = plot_batch(batch, outputs=outputs)
+                    writer.add_figure(
+                        'Epoch/Validation',
+                        figure,
+                        iteration,
+                    )
+            num_validation_batches = len(validation_loader)
+            validation_loss /= num_validation_batches
             writer.add_scalars(
                 'Loss',
-                {'Batch/Training': batch_loss.item()},
+                {'Epoch/Validation': validation_loss},
                 iteration,
             )
-            epoch_loss += batch_loss.item()
 
-            # Plot first batch
-            if batch_index == 0:
-                figure = plot_batch(batch, outputs=outputs)
-                writer.add_figure(
-                    'Epoch/Training',
-                    figure,
+            # Log stuff every N epochs
+            if epoch % log_every_n_epochs == 0 and verbose:
+                # Log weights histograms
+                for name, parameters in net.named_parameters():
+                    writer.add_histogram(
+                        name,
+                        parameters.detach().numpy(),
+                        iteration,
+                    )
+
+            # Update weights
+            net.train()
+            running_loss = 0
+            epoch_loss = 0
+            for batch_index, batch in enumerate(training_loader):
+                iteration += 1
+                inputs = batch.image
+                labels = batch.label
+                sampled_images.append(batch.name)
+
+                # Zero the parameter gradients
+                optimizer.zero_grad()
+
+                # Forward pass
+                outputs = net(inputs)
+
+                # Compute loss
+                foreground = outputs[:, 1:2, ...]
+                batch_loss = criterion(foreground, labels.float())
+
+                # Compute gradients (dJ/dw) through backpropagation
+                batch_loss.backward()
+
+                # Update weights
+                optimizer.step()
+
+                # Print statistics
+                running_loss += batch_loss.item()
+                if iteration % 10 == 9:  # print every 10 iterations
+                    running_loss /= 10
+                    message = f'[{epoch}, {batch_index:5d}] loss: {running_loss:.3f}'
+                    progress.set_description(message)
+                    running_loss = 0
+
+                # Log iteration loss
+                writer.add_scalars(
+                    'Loss',
+                    {'Batch/Training': batch_loss.item()},
                     iteration,
                 )
+                epoch_loss += batch_loss.item()
 
-        # Log epoch training loss
-        num_training_batches = len(training_loader)
-        epoch_loss /= num_training_batches
-        writer.add_scalars(
-            'Loss',
-            {'Epoch/Training': epoch_loss},
-            iteration,
-        )
+                # Plot first batch
+                if batch_index == 0:
+                    figure = plot_batch(batch, outputs=outputs)
+                    writer.add_figure(
+                        'Epoch/Training',
+                        figure,
+                        iteration,
+                    )
 
-        # Update log
-        lines = []
-        for iteration, images_names in enumerate(sampled_images):
-            lines.append(
-                f'Iteration {iteration: 5d}: {", ".join(images_names)}')
+            # Log epoch training loss
+            num_training_batches = len(training_loader)
+            epoch_loss /= num_training_batches
+            writer.add_scalars(
+                'Loss',
+                {'Epoch/Training': epoch_loss},
+                iteration,
+            )
 
-        log_path.write_text('\n'.join(lines))
+            # Update log
+            lines = []
+            for iteration, images_names in enumerate(sampled_images):
+                lines.append(
+                    f'Iteration {iteration: 5d}: {", ".join(images_names)}')
 
-    print()
-    print('Finished Training')
+            sampled_images_log_path.write_text('\n'.join(lines))
+        logger.info('Finished training')
+    except KeyboardInterrupt:
+        logger.debug('Test')
+        logger.warning('KeyboardInterrupt')
+    except Exception as e:
+        logger.critical('Exception occurred', exc_info=True)
 
-    model_path = Path(writer.log_dir) / 'model.pt'
-    print(f'Saving model to {model_path}...')
+    model_path = experiment_dir / 'model.pt'
+    logger.info(f'Saving model to "{model_path}"...')
     torch.save(net.state_dict(), model_path)
