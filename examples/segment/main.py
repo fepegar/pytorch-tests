@@ -46,40 +46,6 @@ def plot_batch(batch, outputs=None):
     return fig
 
 
-class ColoredFormatter(logging.Formatter):
-    def __init__(self, msg, use_color=True):
-        super().__init__(msg)
-        self.use_color = use_color
-        RED = '\033[91m'
-        GREEN = '\033[92m'
-        YELLOW = '\033[93m'
-        BLUE = '\033[94m'
-        MAGENTA = '\033[95m'
-        CYAN = '\033[96m'
-        WHITE = '\033[97m'
-        BOLD = '\033[1m'
-        ENDC = '\033[0m'
-
-        self.colormap = {
-            'INFO': GREEN,
-            'DEBUG': CYAN,
-            'WARNING': YELLOW,
-            'ERROR': RED,
-            'CRITICAL': RED,
-        }
-
-    def format(self, record):
-        levelname = record.levelname
-        ENDC = '\033[0m'
-        if self.use_color:
-            try:
-                levelname_color = self.colormap[levelname] + levelname + ENDC
-                record.levelname = levelname_color
-            except KeyError:
-                print('levelname not in', self.colormap)
-        return logging.Formatter.format(self, record)
-
-
 if __name__ == '__main__':
     batch_size = 4
     learning_rate = 1e-3
@@ -89,12 +55,10 @@ if __name__ == '__main__':
 
     # TensorBoard
     writer = SummaryWriter()
-    logger.debug(f'TensorBoard directory: {writer.log_dir}')
     experiment_dir = Path(writer.log_dir)
 
     # Log
     log_path = '/tmp/log.log'  # experiment_dir / 'log.log'
-    logger.debug(f'Log file: {log_path}')
 
     logger = logging.getLogger(experiment_dir.name)
     logger.setLevel(logging.DEBUG)
@@ -102,15 +66,25 @@ if __name__ == '__main__':
     log_file = logging.FileHandler(log_path)
     log_file.setLevel(logging.DEBUG)
     formatter = logging.Formatter(
-        '%(asctime)s - %(levelname)-8s - %(message)s')
+        '%(asctime)s'
+        ' - %(processName)s %(filename)s:%(lineno)s'
+        ' - %(levelname)-8s - %(message)s'
+    )
     log_file.setFormatter(formatter)
     logger.addHandler(log_file)
 
     console = logging.StreamHandler()
     console.setLevel(logging.INFO)
-    console_formatter = ColoredFormatter('%(levelname)-8s - %(message)s')
+    from colorlog import ColoredFormatter
+    console_formatter = ColoredFormatter(
+        '%(log_color)s%(levelname)-8s%(reset)s - %(message)s')
     console.setFormatter(console_formatter)
     logger.addHandler(console)
+
+    logger.debug(f'Log file: {log_path}')
+
+    # Results dir
+    logger.debug(f'TensorBoard directory: {writer.log_dir}')
 
     # Sampling log
     sampled_images_log_path = experiment_dir / 'sampled_images.log'
@@ -178,6 +152,7 @@ if __name__ == '__main__':
     # )
     from pnet import PNet
     net = PNet(in_channels=1, out_channels=2)
+    logger.debug(f'Architecture: {net}')
 
     # # Log architecture
     # if True: #verbose:
@@ -198,6 +173,7 @@ if __name__ == '__main__':
         lr=learning_rate,
         amsgrad=True,
     )
+    logger.debug(f'Optimizer: {optimizer}')
 
     logger.info('Training...')
     epochs = 100
@@ -313,7 +289,6 @@ if __name__ == '__main__':
             sampled_images_log_path.write_text('\n'.join(lines))
         logger.info('Finished training')
     except KeyboardInterrupt:
-        logger.debug('Test')
         logger.warning('KeyboardInterrupt')
     except Exception as e:
         logger.critical('Exception occurred', exc_info=True)

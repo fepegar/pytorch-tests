@@ -14,5 +14,6 @@ setup(
         'tensorboardX',
         'matplotlib',
         'tqdm',
+        'colorlog',
     ],
 )
