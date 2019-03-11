@@ -89,6 +89,18 @@ class ResidualBlock(nn.Module):
         self.residual_block = nn.Sequential(*conv_blocks)
 
     def forward(self, x):
+        """
+        From the original ResNet paper, page 4:
+
+        "When the dimensions increase, we consider two options:
+        (A) The shortcut stillvperforms identity mapping,
+        with extra zero entries padded
+        for increasing dimensions. This option introduces no extra
+        parameter; (B) The projection shortcut in Eqn.(2) is used to
+        match dimensions (done by 1×1 convolutions). For both
+        options, when the shortcuts go across feature maps of two
+        sizes, they are performed with a stride of 2."
+        """
         out = self.residual_block(x)
         if self.residual:
             if self.change_dimension:
