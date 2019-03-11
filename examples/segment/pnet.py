@@ -3,6 +3,7 @@ Interactive Medical Image Segmentation Using Deep Learning With Image-Specific F
 DeepIGeoS: A Deep Interactive Geodesic Framework for Medical Image Segmentation
 """
 
+import numpy as np
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -149,6 +150,11 @@ class BasePNet(nn.Module):
         x = torch.cat(outputs, dim=1)
         out = self.output_block(x)
         return out
+
+    @property
+    def num_parameters(self):
+        N = sum(np.prod(parameters.shape) for parameters in self.parameters())
+        return N
 
 
 
