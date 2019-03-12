@@ -15,5 +15,6 @@ setup(
         'matplotlib',
         'tqdm',
         'colorlog',
+        'sacred',
     ],
 )
