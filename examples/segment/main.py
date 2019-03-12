@@ -49,16 +49,17 @@ def plot_batch(batch, outputs=None):
     return fig
 
 
-@ex.config
-def cfg():
+if __name__ == "__main__":
+# @ex.config
+# def cfg():
     # pylint: disable=unused-variable
     batch_size = 4
     learning_rate = 1e-3
     architecture = 'pnet'
 
 
-@ex.automain
-def main(batch_size, learning_rate, architecture):
+# @ex.automain
+# def main(batch_size, learning_rate, architecture):
     # pylint: disable=invalid-name
     verbose = False
 
@@ -110,7 +111,7 @@ def main(batch_size, learning_rate, architecture):
     padding = (left, top, right, bottom)
 
     # Create datasets
-    root_dir = Path('/tmp/pytorch_dataset/').expanduser()
+    root_dir = Path('~/git/pytorch-tests/pytorch_dataset/').expanduser()
     dataset = ResectionSideDataset(root_dir, padding, resize=net_input_size)
     N = len(dataset)
     dataset_split_ratio = 0.8
