@@ -110,11 +110,11 @@ class ResidualBlock(nn.Module):
                     if self.dimensions == 2:
                         N, _, H, W = x.shape
                         pad = out.shape[1] - x.shape[1]  # diff of channels
-                        zeros = torch.zeros(N, pad, H, W)
+                        zeros = torch.zeros(N, pad, H, W, device=x.device)
                     elif self.dimensions == 3:
                         N, _, D, H, W = x.shape
                         pad = out.shape[1] - x.shape[1]  # diff of channels
-                        zeros = torch.zeros(N, pad, D, H, W)
+                        zeros = torch.zeros(N, pad, D, H, W, device=x.device)
                     x = torch.cat((x, zeros), dim=1)  # channels dimension
             out = x + out
         return out
@@ -245,10 +245,17 @@ class HighRes3DNet(HighResNet):
 
 if __name__ == '__main__':
     import torch
-    b = HighRes2DNet(1, 2)
-    i = torch.rand(1, 1, 32, 32)
-    print(b(i).shape)
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # b = HighRes2DNet(1, 2)
+    # b.to(device)
+    # i = torch.rand(1, 1, 32, 32, device=device)
+    # print(b(i).shape)
 
     b = HighRes3DNet(1, 2)
-    i = torch.rand(1, 1, 32, 32, 32)
+    b.to(device)
+    print(b.num_parameters)
+    # i = torch.rand(1, 1, 32, 32, 32, device=device)
+    i = torch.rand(1, 1, 97, 115, 97, device=device)
     print(b(i).shape)
