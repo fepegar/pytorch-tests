@@ -72,4 +72,4 @@ class LeNetLocalization(nn.Module):
 
     @property
     def num_parameters(self):
-        return sum(parameters.shape for parameters in self.parameters())
+        return sum(np.prod(parameters.shape) for parameters in self.parameters())
