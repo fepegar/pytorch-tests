@@ -262,26 +262,3 @@ class HighRes3DNet(HighResNet):
     def __init__(self, *args, **kwargs):
         kwargs['dimensions'] = 3
         super().__init__(*args, **kwargs)
-
-
-
-if __name__ == '__main__':
-    import torch
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    # b = HighRes2DNet(1, 2)
-    # b.to(device)
-    # b.eval()
-    # print(b.num_parameters)
-    # i = torch.rand(1, 1, 32, 32, device=device)
-    # print(b(i).shape)
-
-    b = HighRes3DNet(1, 2)
-    b.to(device)
-    b.eval()
-    print(b.num_parameters)
-    # i = torch.rand(1, 1, 32, 32, 32, device=device)
-    # i = torch.rand(1, 1, 97, 115, 97, device=device)
-    i = torch.rand(1, 1, 80, 80, 80, device=device)
-    print(b(i).shape)
