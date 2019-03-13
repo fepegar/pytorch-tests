@@ -37,7 +37,7 @@ class ConvolutionalBlock(nn.Module):
         conv_class = nn.Conv2d if dimensions == 2 else nn.Conv3d
         batch_norm_class = nn.BatchNorm2d if dimensions == 2 else nn.BatchNorm3d
 
-        layers = nn.ModuleList()
+        layers = []
         if batch_norm:
             layers.append(batch_norm_class(in_channels))
         layers.append(nn.ReLU())
@@ -76,7 +76,7 @@ class ResidualBlock(nn.Module):
                     dilation=dilation,
                 )
 
-        conv_blocks = nn.ModuleList()
+        conv_blocks = []
         for _ in range(num_layers):
             conv_block = ConvolutionalBlock(
                 in_channels,
@@ -129,7 +129,7 @@ class DilationBlock(nn.Module):
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
-        residual_blocks = nn.ModuleList()
+        residual_blocks = []
         for _ in range(num_residual_blocks):
             residual_block = ResidualBlock(
                 in_channels,
@@ -179,7 +179,7 @@ class HighResNet(nn.Module):
         conv_class = nn.Conv2d if dimensions == 2 else nn.Conv3d
         batch_norm_class = nn.BatchNorm2d if dimensions == 2 else nn.BatchNorm3d
 
-        first_block_list = nn.ModuleList()
+        first_block_list = []
         initial_out_channels = 2 ** initial_out_channels_power
         first_block_list.append(padding_instance)
         first_conv = conv_class(
@@ -193,7 +193,7 @@ class HighResNet(nn.Module):
         first_block_list.append(nn.ReLU())
         first_block = nn.Sequential(*first_block_list)
 
-        blocks = nn.ModuleList()
+        blocks = []
         blocks.append(first_block)
         in_channels = out_channels = first_conv.out_channels
         for dilation_idx in range(dilations):
@@ -247,7 +247,6 @@ class HighResNet(nn.Module):
 
     def get_receptive_field_world(self, spacing=1):
         return self.receptive_field * spacing
-
 
 
 
