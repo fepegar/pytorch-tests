@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
+import numpy as np
 
 PADDING_MODES = {
     'reflect': 'Reflection',
@@ -166,6 +167,9 @@ class HighResNet(nn.Module):
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
+        self.layers_per_residual_block = layers_per_residual_block
+        self.residual_blocks_per_dilation = residual_blocks_per_dilation
+        self.dilations = dilations
 
         if dimensions == 2:
             padding_class = getattr(nn, f'{PADDING_MODES[padding_mode]}Pad2d')
@@ -224,8 +228,26 @@ class HighResNet(nn.Module):
 
     @property
     def num_parameters(self):
-        import numpy as np
         return sum(np.prod(p.shape) for p in self.parameters())
+
+    @property
+    def receptive_field(self):
+        """
+        B: number of convolutional layers per residual block
+        N: number of residual blocks per dilation factor
+        D: number of different dilation factors
+        """
+        B = self.layers_per_residual_block
+        D = self.dilations
+        N = self.residual_blocks_per_dilation
+        d = np.arange(D)
+        input_output_diff = (3 - 1) + np.sum(B * N * 2 ** (d + 1))
+        receptive_field = input_output_diff + 1
+        return receptive_field
+
+    def get_receptive_field_world(self, spacing=1):
+        return self.receptive_field * spacing
+
 
 
 
