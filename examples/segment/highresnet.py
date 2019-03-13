@@ -155,8 +155,8 @@ class HighResNet(nn.Module):
                  out_channels,
                  dimensions=None,
                  initial_out_channels_power=4,
-                 layers_per_block=2,
-                 blocks_per_dilation=3,
+                 layers_per_residual_block=2,
+                 residual_blocks_per_dilation=3,
                  dilations=3,
                  batch_norm=True,
                  residual=True,
@@ -201,8 +201,8 @@ class HighResNet(nn.Module):
                 out_channels,
                 dilation,
                 dimensions,
-                layers_per_block=layers_per_block,
-                num_residual_blocks=blocks_per_dilation,
+                layers_per_block=layers_per_residual_block,
+                num_residual_blocks=residual_blocks_per_dilation,
                 batch_norm=batch_norm,
                 residual=residual,
             )
@@ -240,3 +240,26 @@ class HighRes3DNet(HighResNet):
     def __init__(self, *args, **kwargs):
         kwargs['dimensions'] = 3
         super().__init__(*args, **kwargs)
+
+
+
+if __name__ == '__main__':
+    import torch
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # b = HighRes2DNet(1, 2)
+    # b.to(device)
+    # b.eval()
+    # print(b.num_parameters)
+    # i = torch.rand(1, 1, 32, 32, device=device)
+    # print(b(i).shape)
+
+    b = HighRes3DNet(1, 2)
+    b.to(device)
+    b.eval()
+    print(b.num_parameters)
+    # i = torch.rand(1, 1, 32, 32, 32, device=device)
+    # i = torch.rand(1, 1, 97, 115, 97, device=device)
+    i = torch.rand(1, 1, 80, 80, 80, device=device)
+    print(b(i).shape)
