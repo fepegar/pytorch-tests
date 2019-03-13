@@ -125,7 +125,7 @@ class ResidualBlock(nn.Module):
 class DilationBlock(nn.Module):
     def __init__(self, in_channels, out_channels, dilation, dimensions,
                  layers_per_block=2, num_residual_blocks=3, batch_norm=True,
-                 residual=True):
+                 residual=True, residual_type='pad'):
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -139,6 +139,7 @@ class DilationBlock(nn.Module):
                 dimensions,
                 batch_norm=batch_norm,
                 residual=residual,
+                residual_type=residual_type,
             )
             residual_blocks.append(residual_block)
             in_channels = out_channels
@@ -161,6 +162,7 @@ class HighResNet(nn.Module):
                  dilations=3,
                  batch_norm=True,
                  residual=True,
+                 residual_type='pad',
                  padding_mode='constant'):
         assert padding_mode in PADDING_MODES.keys()
         assert dimensions in (2, 3)
@@ -209,6 +211,7 @@ class HighResNet(nn.Module):
                 num_residual_blocks=residual_blocks_per_dilation,
                 batch_norm=batch_norm,
                 residual=residual,
+                residual_type=residual_type,
             )
             blocks.append(dilation_block)
             out_channels *= 2
