@@ -79,7 +79,6 @@ class PNetBlock(nn.Module):
             in_channels = out_channels
         self.block = nn.Sequential(*blocks)
         if dimensions == 3:
-            out_channels = out_channels // 4
             self.reduce_channels_conv = nn.Conv3d(
                 in_channels=out_channels,
                 out_channels=out_channels // 4,
