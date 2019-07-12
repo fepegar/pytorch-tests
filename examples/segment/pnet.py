@@ -168,3 +168,28 @@ class PCNet(BasePNet):
     def __init__(self, *args, **kwargs):
         kwargs['dimensions'] = 3
         super().__init__(*args, **kwargs)
+
+
+if __name__ == '__main__':
+    import torch
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # b = PNet(1, 2)
+    # b.to(device)
+    # b.eval()
+    # print(b.num_parameters)
+    # i = torch.rand(1, 1, 32, 32, device=device)
+    # print(b(i).shape)
+
+    b = PCNet(
+        1, 2,
+    )
+    b.to(device)
+    # b.eval()
+    print(b.num_parameters)
+    i = torch.rand(1, 1, 97, 115, 97, device=device)  # 2 mm
+    # print(b.get_receptive_field_world(spacing=3))
+    # i = torch.rand(1, 1, 64, 76, 64, device=device)  # 3 mm
+    # i = torch.rand(1, 1, 80, 80, 80, device=device)
+    print(b(i).shape)

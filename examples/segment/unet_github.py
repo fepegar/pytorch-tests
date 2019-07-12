@@ -6,6 +6,12 @@ from torch import nn
 import torch.nn.functional as F
 
 
+POOLING_DICT = {
+    'average': 'Avg',
+    'max': 'Max',
+}
+
+
 class UNet(nn.Module):
     def __init__(self, in_channels=1, n_classes=2, depth=5, wf=6, padding=False,
                  batch_norm=False, up_mode='upconv', dimensions=None):
@@ -92,6 +98,9 @@ class UNet(nn.Module):
         output_shape = np.array(y.shape[2:])
         return input_shape - output_shape
 
+    def get_receptive_field_world(self, spacing=1):
+        return self.receptive_field * spacing
+
 
 class UNetConvBlock(nn.Module):
     def __init__(self, in_size, out_size, padding, batch_norm, dimensions):
@@ -106,7 +115,10 @@ class UNetConvBlock(nn.Module):
         if batch_norm:
             block.append(batch_norm_class(out_size))
 
-        block.append(conv_class(out_size, out_size, kernel_size=3,
+        in_size = out_size
+        if dimensions == 3:
+            out_size *= 2
+        block.append(conv_class(in_size, out_size, kernel_size=3,
                                padding=int(padding)))
         block.append(nn.ReLU())
         if batch_norm:
@@ -162,7 +174,9 @@ class UNet2D(UNet):
         super().__init__(*args, **kwargs)
 
     def get_dummy_input(self):
-        return torch.rand(1, 1, 200, 200)
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        x = torch.rand(1, 1, 200, 200, device=device)
+        return x
 
 
 class UNet3D(UNet):
@@ -173,4 +187,96 @@ class UNet3D(UNet):
         super().__init__(*args, **kwargs)
 
     def get_dummy_input(self):
-        return torch.rand(1, 1, 100, 100, 100)
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        x = torch.rand(1, 1, 100, 100, 100, device=device)
+        return x
+
+
+class Encoder(nn.Module):
+    def __init__(self, in_channels=1, num_classes=2, depth=5, wf=6,
+                 batch_norm=False, dimensions=None, pooling_type='average'):
+        if dimensions not in (2, 3):
+            raise ValueError('dimensions must be 2 or 3'
+                             ', not {}'.format(dimensions))
+        if pooling_type not in POOLING_DICT:
+            raise ValueError('pooling_type must be "average" or "max"'
+                             ', not {}'.format(dimensions))
+        super().__init__()
+        self.dimensions = dimensions
+        self.depth = depth
+
+        classifier_pooling_type = POOLING_DICT[pooling_type]
+        classifier_pooling_class_name = f'Adaptive{classifier_pooling_type}Pool{dimensions}d'
+        classifier_pooling_class = getattr(nn, classifier_pooling_class_name)
+
+        downsample_class = nn.MaxPool2d if dimensions == 2 else nn.MaxPool3d
+
+        prev_channels = in_channels
+        self.down_path = nn.ModuleList()
+        padding = False
+        first_block = True
+        for i in range(depth):
+            if not first_block:
+                self.down_path.append(downsample_class(2))
+            intermediate_channels = 2**(wf + i)
+            block = UNetConvBlock(prev_channels, intermediate_channels,
+                                  padding, batch_norm, dimensions)
+            self.down_path.append(block)
+            if dimensions == 2:
+                prev_channels = intermediate_channels
+            else:
+                prev_channels = intermediate_channels * 2
+            first_block = False
+
+        self.pooling_layer = classifier_pooling_class(1)
+        self.fc = nn.Linear(prev_channels, num_classes)
+
+    def forward(self, x):
+        for block in self.down_path:
+            x = block(x)
+            print(x.shape)
+        x = self.pooling_layer(x)
+        x = x.view(x.size(0), -1)
+        x = self.fc(x)
+        return x
+
+    @property
+    def num_parameters(self):
+        N = sum(np.prod(parameters.shape) for parameters in self.parameters())
+        return N
+
+
+class Encoder2D(Encoder):
+    def __init__(self, *args, **kwargs):
+        kwargs['dimensions'] = 2
+        super().__init__(*args, **kwargs)
+
+
+class Encoder3D(Encoder):
+    def __init__(self, *args, **kwargs):
+        kwargs['dimensions'] = 3
+        kwargs['wf'] = 5
+        kwargs['depth'] = 4
+        super().__init__(*args, **kwargs)
+
+
+if __name__ == "__main__":
+    import torch
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(device)
+
+    b = Encoder3D(
+        in_channels=1, num_classes=6,
+    )
+    b.to(device)
+    # print(b)
+    # print(b.num_parameters)
+    # print(b.get_receptive_field_world(spacing=2))
+    # for n in range(1, 100):
+    #     print(n)
+    n = 1
+    # i = torch.rand(n, 1, 193, 229, 193, device=device)  # 1 mm
+    t = torch.rand(n, 1, 97, 115, 97, device=device)  # 2 mm
+    # x = torch.rand(1, 1, 64, 76, 64, device=device)  # 3 mm
+    print(b(t).shape)
